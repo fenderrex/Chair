@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Driver • RideShare</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<button id="ride-alert" class="ride-alert hidden" type="button" aria-label="Preview route for current fare offer">New ride request</button>
+<main class="app-shell">
+    <section class="sidebar">
+        <div class="brand-row">
+            <div class="logo">D</div>
+            <div><h1>Driver</h1><p>Live trip console</p></div>
+            <span id="driver-stream-state" class="pill">Socket connecting</span>
+        </div>
+
+        <div class="card lifecycle-mode-card">
+            <div class="lifecycle-mode-row">
+                <div>
+                    <div class="eyebrow">UI LIFECYCLE</div>
+                    <strong>Ride panel mode</strong>
+                </div>
+                <label class="lifecycle-switch">
+                    <input type="checkbox" id="driver-lifecycle-demo" data-lifecycle-toggle>
+                    Demo history
+                </label>
+            </div>
+            <p class="muted">Demo shows the full frozen lifecycle. Normal mode shows only the currently active ride DIV.</p>
+        </div>
+
+        <div class="card" id="driver-status-card" data-driver-ui="driver-status">
+            <div class="section-header">
+                <div><div class="eyebrow">STATUS</div><h3 id="driver-name">Loading driver…</h3></div>
+                <span id="driver-online-state" class="pill">Loading…</span>
+            </div>
+            <button id="driver-online-toggle" class="button secondary" disabled>Loading status…</button>
+            <p id="driver-online-detail" class="muted" role="status"></p>
+            <p id="driver-location-status" class="muted">Location is shown on the map and updated from Admin simulation/GPS.</p>
+        </div>
+
+
+        
+        <div class="card" id="driver-requests-card" data-driver-ui="ride-requests">
+            <div class="section-header"><div><div class="eyebrow">ACTIVE REQUESTS</div><h3>Passengers requesting rides</h3></div><span id="request-count" class="pill">0</span></div>
+            <div id="active-requests" class="request-list"><p class="muted">No active requests.</p></div>
+        </div>
+
+        <div class="card" id="ride-offer-card" data-driver-ui="ride-offer" data-lifecycle-card data-lifecycle-key="offer" data-lifecycle-order="10" data-lifecycle-statuses="REQUESTED,OFFERED">
+            <div class="eyebrow">RIDE REQUEST</div>
+            <h2 id="offer-title">No active ride request</h2>
+            <p id="offer-detail" class="muted">
+                When you are the closest available driver, a ride request will appear here immediately.
+            </p>
+            <div class="stats">
+                <div><span>Pickup distance</span><strong id="offer-distance">—</strong></div>
+                <div><span>Fare estimate</span><strong id="offer-fare">—</strong></div>
+                <div><span>Trip</span><strong id="offer-trip">—</strong></div>
+            </div>
+            <div id="offer-waiting-panel" class="waiting-offer-panel" hidden aria-live="polite">
+                <div class="eyebrow">OFFER AVAILABLE IN</div>
+                <strong id="offer-waiting-countdown" class="waiting-offer-countdown">00:00</strong>
+                <p id="offer-waiting-detail" class="muted">Waiting for this search round to reach your area.</p>
+            </div>
+            <p id="offer-timer" class="offer-timer muted">Waiting for dispatch timer…</p>
+            <div class="button-row">
+                <button id="accept-offer" class="button primary" disabled>Accept Ride</button>
+                <button id="decline-offer" class="button danger" disabled>Decline</button>
+            </div>
+        </div>
+
+        <div class="card" id="driver-active-ride-card" data-driver-ui="active-ride">
+            <div class="eyebrow">ACTIVE RIDE</div>
+            <h2 id="driver-trip-title">Waiting for passenger</h2>
+            <p id="driver-trip-detail" class="muted">Request a ride from the passenger screen.</p>
+            <div class="stats">
+                <div><span>Trip</span><strong id="driver-trip-id">—</strong></div>
+                <div><span>ETA</span><strong id="driver-eta">—</strong></div>
+                <div><span>Status</span><strong id="driver-status">Idle</strong></div>
+            </div>
+        </div>
+
+        
+        <div class="card" id="pickup-drive-card" data-driver-ui="route-controls" data-lifecycle-card data-lifecycle-key="drive" data-lifecycle-order="20" data-lifecycle-statuses="DRIVER_ASSIGNED,DRIVER_EN_ROUTE,IN_PROGRESS">
+            <div class="eyebrow" id="pickup-drive-eyebrow">DRIVER TO PASSENGER</div>
+            <h3 id="pickup-drive-title">Accept a ride first</h3>
+            <p id="pickup-drive-detail" class="muted">
+                After accepting, preview the road route to the passenger and start the simulated drive.
+            </p>
+            <div class="button-row">
+                <button id="preview-pickup-route" class="button secondary" disabled>
+                    Preview Pickup Route
+                </button>
+                <button id="start-pickup-sim" class="button primary" disabled>
+                    Start Driving
+                </button>
+                <button id="mark-driver-arrived" class="button primary" disabled>
+                    Arrived at Pickup
+                </button>
+            </div>
+            <button id="stop-pickup-sim" class="button danger" disabled>
+                Stop Simulation
+            </button>
+        </div>
+
+        <div class="card" id="pickup-confirm-card" data-driver-ui="passenger-pickup" data-lifecycle-card data-lifecycle-key="pickup" data-lifecycle-order="30" data-lifecycle-statuses="DRIVER_ARRIVED,PICKUP_PENDING">
+            <div class="eyebrow">PASSENGER PICKUP</div>
+            <h3 id="pickup-confirm-title">Arrive at passenger first</h3>
+            <p id="pickup-confirm-detail" class="muted">
+                When the passenger is physically in the vehicle, confirm pickup here.
+            </p>
+
+            <button id="claim-passenger-pickup" class="button primary" disabled>
+                Pick Up Passenger
+            </button>
+
+            <label class="pickup-slider-label" for="pickup-passenger-slider">
+                Slide to mark passenger picked up
+            </label>
+            <input
+                id="pickup-passenger-slider"
+                class="pickup-slider"
+                type="range"
+                min="0"
+                max="100"
+                value="0"
+                step="1"
+                disabled
+            >
+            <div class="pickup-slider-scale">
+                <span>Not picked up</span>
+                <strong id="pickup-slider-value">0%</strong>
+                <span>Picked up</span>
+            </div>
+        </div>
+
+        <div class="card" id="driver-message-card" data-driver-ui="message-passenger">
+            <div class="eyebrow">MESSAGE PASSENGER</div>
+            <div id="chat-log" class="chat-log"></div>
+            <div class="chat-compose">
+                <input id="chat-input" placeholder="Message passenger">
+                <button id="chat-send" class="button primary">Send</button>
+            </div>
+        </div>
+
+        <div class="card hidden" id="driver-survey-card" data-driver-ui="after-ride-survey" data-lifecycle-card data-lifecycle-key="complete" data-lifecycle-order="40" data-lifecycle-statuses="TERMINAL">
+            <div class="eyebrow">AFTER RIDE SURVEY</div>
+            <h3>How was this ride?</h3>
+            <label>
+                Rating
+                <select id="driver-survey-rating">
+                    <option value="5">5 - Great</option>
+                    <option value="4">4 - Good</option>
+                    <option value="3">3 - Okay</option>
+                    <option value="2">2 - Poor</option>
+                    <option value="1">1 - Bad</option>
+                </select>
+            </label>
+            <label>
+                Comments
+                <textarea id="driver-survey-comments" rows="3" placeholder="Optional comments"></textarea>
+            </label>
+            <button id="driver-survey-submit" class="button primary">
+                Submit Survey
+            </button>
+            <p id="driver-survey-status" class="muted"></p>
+        </div>
+
+        <div class="card">
+            <a class="button secondary block-link" href="/passenger">Open Passenger View</a>
+            <a class="button secondary block-link" href="/admin/">Open Admin View</a>
+        </div>
+    </section>
+
+    <section class="map-panel">
+        <div id="map"></div>
+    </section>
+</main>
+
+<script>window.DRIVER_ID = {{ driver_id }}; window.DEMO_MODE = {{ config.DEMO_MODE|tojson }};</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/trip-timing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lifecycle-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/driver.js') }}"></script>
+</body>
+</html>

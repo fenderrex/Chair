@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RideShare Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="portal-body">
+    <main class="portal-shell">
+        <section class="portal-hero">
+            <div class="logo">R</div>
+            <p class="eyebrow">RIDESHARE PLATFORM</p>
+            <h1>Choose a view</h1>
+            <p class="muted">
+                Passenger, driver, and admin screens share the same Flask backend,
+                database, trip data, route estimates, messages, and live location system.
+            </p>
+
+            <div class="portal-grid">
+                <a class="portal-card" href="/passenger">
+                    <span class="portal-icon">P</span>
+                    <h2>Passenger</h2>
+                    <p>Request a ride, choose destination, see fare and driver ETA.</p>
+                </a>
+                <a class="portal-card" href="/driver">
+                    <span class="portal-icon">D</span>
+                    <h2>Driver</h2>
+                    <p>See the rider, route, trip status, location and messages.</p>
+                </a>
+                <a class="portal-card" href="/admin/">
+                    <span class="portal-icon">A</span>
+                    <h2>Admin</h2>
+                    <p>Monitor the system and jump directly into either demo screen.</p>
+                </a>
+
+                <a class="portal-card" href="/signup">
+                    <span class="portal-icon">S</span>
+                    <h2>Signup</h2>
+                    <p>Create a passenger or driver account stored in MySQL.</p>
+                </a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

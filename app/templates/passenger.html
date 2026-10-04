@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Passenger • RideShare</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<div id="passenger-alert" class="ride-alert hidden" role="status" aria-live="polite"></div>
+<main class="app-shell">
+    <section class="sidebar">
+        <div class="brand-row">
+            <div class="logo">P</div>
+            <div><h1>{{ passenger.display_name if passenger else "Passenger" }}</h1><p>Book and track your ride</p></div>
+            <span id="passenger-stream-state" class="pill">Socket connecting</span>
+        </div>
+
+        <div class="card lifecycle-mode-card">
+            <div class="lifecycle-mode-row">
+                <div>
+                    <div class="eyebrow">UI LIFECYCLE</div>
+                    <strong>Ride panel mode</strong>
+                </div>
+                <label class="lifecycle-switch">
+                    <input type="checkbox" id="passenger-lifecycle-demo" data-lifecycle-toggle>
+                    Demo history
+                </label>
+            </div>
+            <p class="muted">Demo shows the full frozen lifecycle. Normal mode shows only the currently active ride DIV.</p>
+        </div>
+
+        <div class="card" id="passenger-request-card" data-passenger-ui="trip" data-lifecycle-card data-lifecycle-key="request" data-lifecycle-order="10" data-lifecycle-statuses="IDLE">
+            <div class="eyebrow">TRIP</div>
+            <h2>Where are you going?</h2>
+            <button id="use-location" class="button secondary">Use My Location</button>
+            <div class="field-grid">
+                <label>Pickup latitude<input id="pickup-lat" type="number" step="any" value="33.7206"></label>
+                <label>Pickup longitude<input id="pickup-lng" type="number" step="any" value="-116.2156"></label>
+                <label>Destination latitude<input id="dest-lat" type="number" step="any" value="33.7414"></label>
+                <label>Destination longitude<input id="dest-lng" type="number" step="any" value="-116.3042"></label>
+            </div>
+            <div class="button-row">
+                <button id="estimate" class="button secondary">Estimate Ride</button>
+                <button id="request" class="button primary">Request Ride</button>
+            </div>
+        </div>
+
+        <div class="card" data-passenger-ui="estimate">
+            <div class="section-header">
+                <div><div class="eyebrow">ESTIMATE</div><h3 id="fare">$—</h3></div>
+                <span id="provider" class="pill">No route</span>
+            </div>
+            <div class="stats">
+                <div><span>Distance</span><strong id="distance">—</strong></div>
+                <div><span>Trip time</span><strong id="duration">—</strong></div>
+                <div><span>Driver ETA</span><strong id="eta">—</strong></div>
+            </div>
+        </div>
+
+        <div class="card" id="assigned-driver-card" data-passenger-ui="assigned-driver" data-lifecycle-card data-lifecycle-key="driver" data-lifecycle-order="30" data-lifecycle-statuses="DRIVER_ASSIGNED,DRIVER_EN_ROUTE">
+            <div class="section-header">
+                <div>
+                    <div class="eyebrow">ASSIGNED DRIVER</div>
+                    <h3 id="driver-name">Waiting for a driver…</h3>
+                </div>
+                <span id="driver-state-pill" class="pill">Unassigned</span>
+            </div>
+
+            <p id="vehicle" class="muted">
+                Driver and vehicle information will appear after a driver accepts.
+            </p>
+
+            <div class="stats">
+                <div>
+                    <span>Driver ID</span>
+                    <strong id="assigned-driver-id">—</strong>
+                </div>
+                <div>
+                    <span>Pickup ETA</span>
+                    <strong id="assigned-driver-eta">—</strong>
+                </div>
+                <div>
+                    <span>GPS updated</span>
+                    <strong id="assigned-driver-gps">—</strong>
+                </div>
+            </div>
+            <p class="muted">
+                Driver location:
+                <strong id="assigned-driver-coordinates">—</strong>
+            </p>
+            <button id="center-driver" class="button secondary" disabled>
+                Center Map on Driver
+            </button>
+        </div>
+
+        <div class="card" id="passenger-broker-notices-card" data-passenger-ui="ride-updates" data-lifecycle-card data-lifecycle-key="search" data-lifecycle-order="20" data-lifecycle-statuses="REQUESTED,OFFERED">
+            <div class="eyebrow">RIDE UPDATES</div>
+            <h3>Broker activity</h3>
+            <p class="muted">
+                Search, matching, pickup, and driving steps appear here in order.
+            </p>
+            <div id="passenger-step-list" class="broker-step-list" aria-live="polite">
+                <p class="muted">Waiting for the first ride step…</p>
+            </div>
+        </div>
+
+        <div class="card" id="passenger-pipeline-card" data-passenger-ui="ride-pipeline">
+            <div class="eyebrow">RIDE PIPELINE</div>
+            <div class="trip-pipeline" id="trip-pipeline">
+                <div class="pipeline-step active" data-stage="REQUESTED">
+                    <span>1</span><strong>Requested</strong>
+                </div>
+                <div class="pipeline-step" data-stage="DRIVER_ASSIGNED">
+                    <span>2</span><strong>Driver accepted</strong>
+                </div>
+                <div class="pipeline-step" data-stage="DRIVER_EN_ROUTE">
+                    <span>3</span><strong>Driver approaching</strong>
+                </div>
+                <div class="pipeline-step" data-stage="DRIVER_ARRIVED">
+                    <span>4</span><strong>Driver arrived</strong>
+                </div>
+                <div class="pipeline-step" data-stage="IN_PROGRESS">
+                    <span>5</span><strong>Trip underway</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="card hidden" id="pickup-wait-card" data-passenger-ui="driver-at-pickup" data-lifecycle-card data-lifecycle-key="arrival" data-lifecycle-order="40" data-lifecycle-statuses="DRIVER_ARRIVED">
+            <div class="eyebrow">DRIVER AT PICKUP</div>
+            <h2 id="pickup-wait-time">00:00</h2>
+            <p id="pickup-wait-detail" class="muted">
+                Your driver has arrived and is waiting at the pickup point.
+            </p>
+        </div>
+
+        <div class="card hidden" id="pickup-passenger-confirm-card" data-passenger-ui="confirm-pickup" data-lifecycle-card data-lifecycle-key="pickup" data-lifecycle-order="50" data-lifecycle-statuses="PICKUP_PENDING">
+            <div class="eyebrow">CONFIRM PICKUP</div>
+            <h3>Your driver marked you as picked up</h3>
+            <p class="muted">
+                Confirm only after you are inside the assigned vehicle.
+                Once pickup begins, this ride cannot be canceled.
+            </p>
+            <div class="button-row">
+                <button id="confirm-passenger-pickup" class="button primary">
+                    Confirm I Am in the Vehicle
+                </button>
+                <button id="pickup-help" class="button danger">
+                    I Need Help
+                </button>
+            </div>
+            <p id="pickup-confirm-status" class="muted">
+                Waiting for your confirmation.
+            </p>
+        </div>
+
+        <div class="card" data-passenger-ui="message-driver">
+            <div class="eyebrow">MESSAGE DRIVER</div>
+            <div id="chat-log" class="chat-log"></div>
+            <div class="chat-compose">
+                <input id="chat-input" placeholder="Message your driver">
+                <button id="chat-send" class="button primary">Send</button>
+            </div>
+        </div>
+
+        <div class="card hidden" id="reviewing-drivers-card" data-passenger-ui="drivers-reviewing">
+            <div class="eyebrow">DRIVERS REVIEWING YOUR OFFER</div>
+            <h3 id="reviewing-drivers-title">Drivers can see your fare</h3>
+            <p id="reviewing-drivers-detail" class="muted">
+                As the passenger search expands, drivers inside the radius can review the same fare.
+            </p>
+            <div id="reviewing-drivers-list"></div>
+        </div>
+
+        <div class="card hidden" id="fare-escalation-card" data-passenger-ui="keep-searching">
+            <div class="eyebrow">KEEP SEARCHING?</div>
+            <h3 id="fare-escalation-title">No driver accepted yet</h3>
+            <p id="fare-escalation-detail" class="muted">
+                The last driver response window has ended.
+            </p>
+            <div class="stats">
+                <div>
+                    <span>Original offer</span>
+                    <strong id="fare-original">$—</strong>
+                </div>
+                <div>
+                    <span>Multiplier</span>
+                    <strong id="fare-multiplier">—</strong>
+                </div>
+                <div>
+                    <span>New offer</span>
+                    <strong id="fare-next">$—</strong>
+                </div>
+            </div>
+            <div class="button-row">
+                <button id="accept-fare-escalation" class="button primary">
+                    Increase Fare & Keep Searching
+                </button>
+                <button id="decline-fare-escalation" class="button danger">
+                    Stop Searching
+                </button>
+            </div>
+            <p id="fare-escalation-status" class="muted">
+                Your current fare does not change until you approve.
+            </p>
+        </div>
+
+        <div class="card hidden" id="passenger-survey-card" data-passenger-ui="after-ride-survey" data-lifecycle-card data-lifecycle-key="complete" data-lifecycle-order="70" data-lifecycle-statuses="TERMINAL">
+            <div class="eyebrow">AFTER RIDE SURVEY</div>
+            <h3>How was your ride?</h3>
+            <label>
+                Rating
+                <select id="passenger-survey-rating">
+                    <option value="5">5 - Great</option>
+                    <option value="4">4 - Good</option>
+                    <option value="3">3 - Okay</option>
+                    <option value="2">2 - Poor</option>
+                    <option value="1">1 - Bad</option>
+                </select>
+            </label>
+            <label>
+                Comments
+                <textarea id="passenger-survey-comments" rows="3" placeholder="Optional comments"></textarea>
+            </label>
+            <button id="passenger-survey-submit" class="button primary">
+                Submit Survey
+            </button>
+            <p id="passenger-survey-status" class="muted"></p>
+        </div>
+
+        <div class="card" id="trip-status-card" data-passenger-ui="trip-status" data-lifecycle-card data-lifecycle-key="trip" data-lifecycle-order="60" data-lifecycle-statuses="IN_PROGRESS">
+            <div class="eyebrow">TRIP STATUS</div>
+            <h3 id="trip-status">Not requested</h3>
+            <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+            <button id="cancel-ride" class="button danger" disabled>Cancel Ride</button>
+            <p id="status-detail" class="muted">Set a destination and request a ride.</p>
+        </div>
+    </section>
+
+    <section class="map-panel">
+        <div id="map"></div>
+        <div class="map-overlay top-left">
+            <a class="view-link" href="/">Home</a>
+            <a class="view-link" href="/driver">Driver view</a>
+            <a class="view-link" href="/admin/">Admin</a>
+        </div>
+    </section>
+</main>
+
+<script>
+window.PASSENGER_USER_ID = {{ passenger.id if passenger else "null" }};
+window.PASSENGER_NAME = {{ (passenger.display_name if passenger else "Demo Passenger")|tojson }};
+window.DEMO_MODE = {{ config.DEMO_MODE|tojson }};
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/trip-timing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lifecycle-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/passenger.js') }}"></script>
+</body>
+</html>

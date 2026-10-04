@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <title>Admin • RideShare</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="portal-body">
+<main class="admin-shell">
+    <header class="admin-header">
+        <div>
+            <p class="eyebrow">ADMIN</p>
+            <h1>RideShare control center</h1>
+            <p class="muted">Select a driver or passenger, inspect active trips, and manage database records.</p>
+        </div>
+        <div class="admin-actions">
+            <a class="button secondary block-link" href="/signup">Signup Page</a>
+            <a class="button secondary block-link" href="/">Home</a>
+        </div>
+    </header>
+
+    <section class="card">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">DISPATCH ALERTS</p>
+                <h2>Unaccepted ride requests</h2>
+            </div>
+            <span id="admin-dispatch-alert-count" class="pill">0</span>
+        </div>
+        <div id="admin-dispatch-alerts">
+            <p class="muted">No exhausted driver searches.</p>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Sequential distance-ranked dispatch</h2>
+        <p>Each driver is ranked by distance ÷ farthest-driver distance. The lowest fraction is offered first. Only after that driver's timer fails does the next-higher fraction receive the offer. The farthest driver is 1.0.</p>
+        <form id="dispatch-settings" class="admin-select-grid">
+            <label>Starting passenger search radius (miles)<input name="initial_radius_miles" type="number" min="0.1" max="1000" step="0.1" required value="{{ dispatch_settings.initial_radius_miles }}"></label>
+            <label>Passenger search radius increase per timer (miles)<input name="radius_miles" type="number" min="0.1" max="100" step="0.1" required value="{{ dispatch_settings.radius_miles }}"></label>
+            <label>Maximum passenger search radius (miles)<input name="max_radius_miles" type="number" min="0.1" max="1000" step="0.1" required value="{{ dispatch_settings.max_radius_miles }}"></label>
+            <label>Expansion timer interval (seconds)<input name="expansion_seconds" type="number" min="0" max="3600" step="0.1" required value="{{ dispatch_settings.expansion_seconds }}"></label>
+            <input name="response_seconds" type="hidden" value="{{ dispatch_settings.response_seconds }}">
+            <label>Pause after all known drivers are reached (seconds)<input name="last_driver_wait_seconds" type="number" min="5" max="3600" step="1" required value="{{ dispatch_settings.last_driver_wait_seconds }}"></label>
+            <label>Fare increase multiplier<input name="fare_multiplier" type="number" min="1.01" max="10" step="0.01" required value="{{ dispatch_settings.fare_multiplier }}"></label>
+            <button class="button primary" type="submit">Save dispatch settings</button>
+        </form>
+        <p id="dispatch-settings-result" role="status" class="muted">Settings apply to new requests and persist after restart.</p>
+    </section>
+    <section class="card admin-table-card">
+        <h2>Platform map</h2>
+        <p class="muted">Blue: available driver · gray: offline driver · orange: busy driver · purple: passenger. Active passenger searches also show a purple search-radius circle. Passenger pins may be trip pickup points; open a pin for its source and timestamp.</p>
+        <div class="admin-actions">
+            <button id="admin-map-fit" class="button secondary">Show everyone</button>
+            <label>Randomize radius (miles)<input id="admin-random-radius" type="number" min="0.1" max="100" step="0.1" value="{{ dispatch_settings.radius_miles }}"></label>
+            <button id="admin-randomize-drivers" class="button primary" {% if not config.DEMO_MODE %}disabled{% endif %}>Randomize driver locations</button>
+        </div>
+        <p id="admin-map-message" class="muted" role="status">Click the map to choose the randomization center. Drivers on trips are skipped; online/offline status stays unchanged. Randomizing requires demo mode.</p>
+        <div id="admin-platform-map" style="height: 480px; width: 100%; border-radius: 12px;" aria-label="Platform locations"></div>
+        <p id="admin-map-summary" class="muted"></p>
+        <details><summary>People without a recorded location</summary><ul id="admin-map-unlocated"></ul></details>
+    </section>
+    <section class="admin-grid">
+        <div class="metric-card"><span>Users</span><strong>{{ counts.users }}</strong></div>
+        <div class="metric-card"><span>Drivers</span><strong>{{ counts.drivers }}</strong></div>
+        <div class="metric-card"><span>Trips</span><strong>{{ counts.trips }}</strong></div>
+        <div class="metric-card"><span>Messages</span><strong>{{ counts.messages }}</strong></div>
+    </section>
+
+    <section class="card admin-table-card">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">VIEW AS</p>
+                <h2>Open a selected account</h2>
+            </div>
+        </div>
+        <div class="admin-select-grid">
+            <div>
+                <label for="admin-driver-select">Driver</label>
+                <select id="admin-driver-select">
+                    {% for driver in drivers %}
+                    <option value="{{ driver.id }}">#{{ driver.id }} — {{ driver.display_name }}</option>
+                    {% endfor %}
+                </select>
+                <button id="admin-open-driver" class="button primary">Open Driver View</button>
+            </div>
+            <div>
+                <label for="admin-passenger-select">Passenger</label>
+                <select id="admin-passenger-select">
+                    {% for passenger in passengers %}
+                    <option value="{{ passenger.id }}">#{{ passenger.id }} — {{ passenger.display_name }}</option>
+                    {% endfor %}
+                </select>
+                <button id="admin-open-passenger" class="button primary">Open Passenger View</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="card admin-table-card">
+        <h2>Live driver response windows &amp; trip stage times</h2>
+        <p id="admin-live-state" class="muted">Connecting…</p>
+        <div id="admin-live-trips"></div>
+    </section>
+    <section class="card admin-table-card">
+        <div class="section-header">
+            <div><p class="eyebrow">ACTIVE REQUESTS</p><h2>Passengers waiting for drivers</h2></div>
+        </div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>Trip</th><th>Passenger</th><th>State</th><th>Wave</th><th>Fare</th><th>Distance</th><th>Offered Driver</th><th>Next expansion</th></tr></thead>
+                <tbody>
+                {% for trip in active_requests %}
+                <tr>
+                    <td>#{{ trip.id }}</td>
+                    <td>{{ trip.passenger_name }}</td>
+                    <td>{{ trip.status }}</td>
+                    <td>{{ trip.dispatch_wave or 0 }}</td>
+                    <td>${{ '%.2f'|format(trip.estimated_fare) }}</td>
+                    <td>{{ '%.1f'|format(trip.estimated_distance_meters / 1609.344) }} mi</td>
+                    <td>{% if trip.offered_driver_id %}#{{ trip.offered_driver_id }}{% else %}Waiting{% endif %}</td>
+                    <td>{% if trip.next_dispatch_at %}{{ trip.next_dispatch_at }}{% else %}—{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="muted">No active ride requests.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card admin-table-card">
+        <div class="section-header">
+            <div><p class="eyebrow">DRIVERS</p><h2>All drivers</h2></div>
+            <button id="admin-reset-drivers" class="button secondary">Reset Test Drivers</button>
+        </div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr><th>ID</th><th>Driver</th><th>Verification</th><th>Online</th><th>Available</th><th>Higher-fare accepts</th><th>Location</th><th>Vehicle</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for driver in drivers %}
+                    <tr>
+                        <td>#{{ driver.id }}</td>
+                        <td><strong>{{ driver.display_name }}</strong><br><span class="muted">{{ driver.email }}</span></td>
+                        <td>{{ driver.verification_status }}</td>
+                        <td>{{ 'Yes' if driver.is_online else 'No' }}</td>
+                        <td>{{ 'Yes' if driver.is_available else 'No' }}</td>
+                        <td>
+                            {{ driver.fare_increase_accept_count or 0 }}
+                            {% if driver.last_fare_increase_accept_at %}
+                            <br><span class="muted">{{ driver.last_fare_increase_accept_at }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{% if driver.current_latitude is not none %}{{ '%.4f'|format(driver.current_latitude) }}, {{ '%.4f'|format(driver.current_longitude) }}{% else %}—{% endif %}</td>
+                        <td>{% if driver.vehicles %}{{ driver.vehicles[0].year }} {{ driver.vehicles[0].make }} {{ driver.vehicles[0].model }}{% else %}—{% endif %}</td>
+                        <td class="admin-row-actions">
+                            <a class="view-link" href="/driver?driver_id={{ driver.id }}">View</a>
+                            <button class="button danger admin-delete" data-kind="driver" data-id="{{ driver.id }}" data-name="{{ driver.display_name }}">Delete</button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="muted">No drivers found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card admin-table-card">
+        <div class="section-header">
+            <div><p class="eyebrow">PASSENGERS</p><h2>Rider accounts</h2></div>
+        </div>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                    {% for passenger in passengers %}
+                    <tr>
+                        <td>#{{ passenger.id }}</td>
+                        <td>{{ passenger.display_name }}</td>
+                        <td>{{ passenger.email }}</td>
+                        <td>{{ passenger.status }}</td>
+                        <td class="admin-row-actions">
+                            <a class="view-link" href="/passenger?user_id={{ passenger.id }}">View</a>
+                            <button class="button danger admin-delete" data-kind="passenger" data-id="{{ passenger.id }}" data-name="{{ passenger.display_name }}">Delete</button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="muted">No passenger accounts.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card admin-table-card">
+        <div class="section-header">
+            <div><p class="eyebrow">TRIPS</p><h2>Database trip records</h2></div>
+        </div>
+        <p class="muted">Deleting a trip first removes its simulation broker job, location history, messages, and payment rows so the subprocess cannot continue advancing it.</p>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>ID</th><th>Passenger</th><th>Driver</th><th>Status</th><th>Progress</th><th>Fare</th><th>Requested</th><th>Action</th></tr></thead>
+                <tbody>
+                    {% for trip in trips %}
+                    <tr>
+                        <td>#{{ trip.id }}</td>
+                        <td>{{ trip.passenger_name }}</td>
+                        <td>{% if trip.driver_id %}#{{ trip.driver_id }}{% elif trip.offered_driver_id %}Offer #{{ trip.offered_driver_id }}{% else %}—{% endif %}</td>
+                        <td>{{ trip.status }}</td>
+                        <td>{{ '%.0f'|format(trip.progress_percent or 0) }}%</td>
+                        <td>${{ '%.2f'|format(trip.estimated_fare) }}</td>
+                        <td>{{ trip.requested_at }}</td>
+                        <td><button class="button danger admin-delete" data-kind="trip" data-id="{{ trip.id }}" data-name="Trip #{{ trip.id }}">Delete</button></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="muted">No trips yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card admin-table-card">
+        <div class="section-header"><div><p class="eyebrow">SIMULATION TOOLS</p><h2>Driver GPS controls</h2></div></div>
+        <p class="muted">The trip broker is database-driven. These tools are only for development driver positioning.</p>
+        <div class="admin-actions">
+            <button id="admin-sim-toggle" class="button primary">Start Simulated GPS</button>
+            <button id="admin-use-rex-gps" class="button secondary">Use My GPS for Rex</button>
+        </div>
+        <pre id="admin-demo-output" class="mini-console">Ready.</pre>
+    </section>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/trip-timing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-map.js') }}"></script>
+</body>
+</html>

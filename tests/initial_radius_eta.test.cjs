@@ -1,0 +1,31 @@
+const fs = require('fs');
+const assert = require('assert');
+
+const radius = fs.readFileSync('app/dispatch/radius.py', 'utf8');
+const settings = fs.readFileSync('app/admin/settings.py', 'utf8');
+const schema = fs.readFileSync('app/schema.py', 'utf8');
+const template = fs.readFileSync('app/templates/admin.html', 'utf8');
+const proximity = fs.readFileSync('app/dispatch/proximity.py', 'utf8');
+const plan = fs.readFileSync('app/dispatch/plan.py', 'utf8');
+const fareRounds = fs.readFileSync('app/dispatch/fare_rounds.py', 'utf8');
+const stream = fs.readFileSync('app/trips/stream.py', 'utf8');
+const passenger = fs.readFileSync('app/static/js/passenger.js', 'utf8');
+
+assert(settings.includes('initial_radius_miles'));
+assert(schema.includes('"initial_radius_miles": "FLOAT NOT NULL DEFAULT 3"'));
+assert(template.includes('Starting passenger search radius'));
+assert(radius.includes('initial_radius\n        + completed_intervals * radius_step'));
+assert(radius.includes('"initial_radius_miles": initial_radius'));
+assert(proximity.includes('if distance <= initial_radius:'));
+assert(proximity.includes('(distance - initial_radius)'));
+assert(plan.includes('if distance <= initial_radius:'));
+assert(plan.includes('\"OFFERED\"\n                if inside_initial_radius'));
+assert(fareRounds.includes('if distance <= initial_radius:'));
+assert(fareRounds.includes('offer.status = \"OFFERED\"'));
+assert(fareRounds.includes('f\"radius={initial_radius:.3f}mi \"'));
+assert(stream.includes('live_review_distance ='));
+assert(stream.includes('estimate_pickup_eta_seconds(live_review_distance)'));
+assert(stream.includes('"driver_distance_miles": ('));
+assert(stream.includes('"driver_eta_seconds": live_driver_eta_seconds'));
+assert(passenger.includes('driver.pickup_eta_seconds'));
+console.log('Initial radius + live ETA: OK');

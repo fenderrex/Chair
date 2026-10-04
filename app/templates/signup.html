@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Signup • RideShare</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="portal-body">
+<main class="signup-shell">
+    <section class="signup-card">
+        <div class="brand-row">
+            <div class="logo">R</div>
+            <div>
+                <h1>Create an account</h1>
+                <p class="muted">Join as a passenger or driver.</p>
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="form-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/signup" class="signup-form">
+            <label>
+                Full name
+                <input
+                    name="display_name"
+                    required
+                    value="{{ values.display_name if values else '' }}"
+                    placeholder="Alex Smith"
+                >
+            </label>
+
+            <label>
+                Email
+                <input
+                    name="email"
+                    type="email"
+                    required
+                    value="{{ values.email if values else '' }}"
+                    placeholder="alex@example.com"
+                >
+            </label>
+
+            <label>
+                Password
+                <input
+                    name="password"
+                    type="password"
+                    minlength="8"
+                    required
+                    placeholder="At least 8 characters"
+                >
+            </label>
+
+            <label>
+                Account type
+                <select name="role">
+                    <option value="PASSENGER"
+                        {% if not values or values.role == 'PASSENGER' %}selected{% endif %}
+                    >
+                        Passenger
+                    </option>
+                    <option value="DRIVER"
+                        {% if values and values.role == 'DRIVER' %}selected{% endif %}
+                    >
+                        Driver
+                    </option>
+                </select>
+            </label>
+
+            <button class="button primary" type="submit">
+                Create Account
+            </button>
+        </form>
+
+        <div class="signup-links">
+            <a href="/passenger">Passenger View</a>
+            <a href="/driver">Driver View</a>
+            <a href="/admin/">Admin</a>
+            <a href="/">Home</a>
+        </div>
+    </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Account Created • RideShare</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="portal-body">
+<main class="signup-shell">
+    <section class="signup-card">
+        <div class="eyebrow">ACCOUNT CREATED</div>
+        <h1>Welcome, {{ user.display_name }}</h1>
+        <p class="muted">
+            Your {{ user.role|lower }} account has been saved to MySQL.
+        </p>
+
+        <div class="signup-links">
+            {% if user.role == "DRIVER" %}
+            <a class="button primary block-link" href="/driver">Open Driver View</a>
+            {% else %}
+            <a class="button primary block-link" href="/passenger">Open Passenger View</a>
+            {% endif %}
+            <a class="button secondary block-link" href="/admin/">Open Admin</a>
+            <a class="button secondary block-link" href="/">Home</a>
+        </div>
+    </section>
+</main>
+</body>
+</html>

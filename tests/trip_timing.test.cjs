@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const context = {window: {}};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../app/static/js/trip-timing.js'), 'utf8'), context);
+const {clock, elapsed} = context.window.TripTiming;
+assert.equal(clock(-4), '0:00');
+assert.equal(clock(125), '2:05');
+const first = {status: 'DRIVER_EN_ROUTE', entered_at: '2026-09-21T20:00:00+00:00'};
+const next = {status: 'DRIVER_ARRIVED', entered_at: '2026-09-21T20:01:05+00:00'};
+assert.equal(elapsed(first, next, Date.parse('2026-09-21T21:00:00Z')), '1:05');
+assert.equal(elapsed(first, null, Date.parse('2026-09-21T20:02:03Z')), '2:03');
+assert.equal(elapsed({status: 'COMPLETED', entered_at: next.entered_at}, null, Date.now()), '');
+console.log('PASS: UTC durations, active counters, completed stages and zero-bound countdowns');

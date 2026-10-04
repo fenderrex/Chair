@@ -2585,3 +2585,4 @@ Dispatch now expands on the broker interval until `max_radius_miles` from the ad
 
 The passenger fare-increase question is removed immediately after a successful action and replaced by a short confirmation that the new fare was applied and the nearby-driver search restarted.
 # Chair
+# Chair
